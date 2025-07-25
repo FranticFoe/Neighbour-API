@@ -1,7 +1,5 @@
 let express = require("express");
 let cors = require("cors");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 let app = express();
@@ -10,9 +8,7 @@ app.use(express.json());
 
 const { v4: uuidv4 } = require("uuid");
 const { Pool } = require("pg");
-const req = require("express/lib/request");
 const { DATABASE_URL } = process.env;
-const { SECRET_KEY } = process.env;
 
 const pool = new Pool({
     connectionString: DATABASE_URL,
@@ -246,6 +242,7 @@ app.post("/join/by-link", async (req, res) => {
     }
 });
 
+//fix the neighbour_id to username
 app.post("/accept/invite", async (req, res) => {
     const client = await pool.connect();
     try {
@@ -361,6 +358,9 @@ app.post("/neighbour/help", async (req, res) => {
         if (start_time && duration) {
             end_time = addMinutesToHHMM(start_time, duration);
         }
+        const parsedCapacity = capacity === "" ? null : capacity;
+        const parsedDate = date === "" ? null : date;
+        const parsedTime = start_time === "" ? null : start_time;
         await client.query(
             "INSERT INTO help_needed (username, community_name, task_title, description, images, capacity, date, start_time, end_time, task_rewards) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
             [
@@ -369,9 +369,9 @@ app.post("/neighbour/help", async (req, res) => {
                 task_title,
                 task_description,
                 images,
-                capacity,
-                date,
-                start_time,
+                parsedCapacity,
+                parsedDate,
+                parsedTime,
                 end_time,
                 task_rewards,
             ],
@@ -471,11 +471,13 @@ app.post("/neighbour/helpers", async (req, res) => {
 
 app.post("/neighbour/create/events", async (req, res) => {
     const client = await pool.connect();
-    const { neighbour_id, community_name } = req.body;
+    const { leader_name, community_name } = req.body;
+
     const checkLeader = await client.query(
-        "SELECT * FROM community WHERE community_name = $1 AND community_leader_id = $2",
-        [community_name, neighbour_id],
+        "SELECT * FROM community WHERE leader_name = $1 AND community_name = $2",
+        [leader_name, community_name],
     );
+
     if (checkLeader.rows.length === 0) {
         return res
             .status(400)
@@ -484,10 +486,7 @@ app.post("/neighbour/create/events", async (req, res) => {
     try {
         const { date, start_time, end_time, event_title, event_description } =
             req.body;
-        const created_by = await client.query(
-            "SELECT username FROM neighbours WHERE neighbour_id = $1",
-            [neighbour_id],
-        );
+
         await client.query(
             "INSERT INTO events (date, start_time, end_time, event_title, event_description, community_name,created_by) VALUES ($1, $2, $3, $4, $5, $6,$7)",
             [
@@ -497,7 +496,7 @@ app.post("/neighbour/create/events", async (req, res) => {
                 event_title,
                 event_description,
                 community_name,
-                created_by.rows[0].username,
+                leader_name,
             ],
         );
         res.status(200).json({ message: "Event created." });
@@ -508,6 +507,29 @@ app.post("/neighbour/create/events", async (req, res) => {
         client.release();
     }
 });
+
+app.get(
+    "/neighbour/isLeader/:username/community/:community_name",
+    async (req, res) => {
+        const client = await pool.connect();
+        const { username, community_name } = req.params;
+        try {
+            const isLeader = await client.query(
+                "SELECT * FROM community WHERE leader_name = $1 AND community_name = $2",
+                [username, community_name],
+            );
+            if (isLeader.rows.length === 0) {
+                return res.status(200).json({ status: false });
+            }
+            res.status(200).json({ status: true });
+        } catch (err) {
+            console.error("Error occured in checking if leader: ", err);
+            res.status(500).json({ message: "Internal server error" });
+        } finally {
+            client.release();
+        }
+    },
+);
 
 app.post("/neighbour/join/events", async (req, res) => {
     const client = await pool.connect();
@@ -726,7 +748,7 @@ app.get("/neighbour/join/request/:community_name", async (req, res) => {
     const { community_name } = req.params;
     try {
         const requests = await client.query(
-            "SELECT username FROM community_join_requests WHERE community_name = $1",
+            "SELECT * FROM community_join_request WHERE community_name = $1",
             [community_name],
         );
         res.status(200).json({ requests: requests.rows });
@@ -757,12 +779,38 @@ app.post("/neighbour/join/request/accept", async (req, res) => {
             [community_name, sender_name],
         );
         await client.query(
-            "DELETE FROM community_join_request WHERE community_name = $1 AND sender_name = $2",
-            [community_name, sender_name],
+            "DELETE FROM community_join_request WHERE sender_name = $1",
+            [sender_name],
         );
         res.status(200).json({ message: "Join request accepted." });
     } catch (err) {
         console.error("Error occured in accepting join request: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete("/neighbour/join/request/decline", async (req, res) => {
+    const client = await pool.connect();
+    const { community_name, username, sender_name } = req.body;
+    const isleader = await client.query(
+        "SELECT * FROM community WHERE community_name = $1 AND leader_name = $2",
+        [community_name, username],
+    );
+    if (isleader.rows.length === 0) {
+        return res
+            .status(400)
+            .json({ message: "You are not the leader of this community." });
+    }
+    try {
+        await client.query(
+            "DELETE FROM community_join_request WHERE sender_name = $1 AND community_name = $2",
+            [sender_name, community_name],
+        );
+        res.status(200).json({ message: "Join request declined." });
+    } catch (err) {
+        console.error("Error occured in declining join request: ", err);
         res.status(500).json({ message: "Internal server error" });
     } finally {
         client.release();
@@ -775,8 +823,8 @@ app.get("/neighbour/availableCommunities/location", async (req, res) => {
         const result = await client.query("SELECT * FROM community");
 
         const mapped = result.rows
-            .filter(row => row.latitude !== null && row.longitude !== null)
-            .map(row => ({
+            .filter((row) => row.latitude !== null && row.longitude !== null)
+            .map((row) => ({
                 community_name: row.community_name,
                 latitude: row.latitude,
                 longitude: row.longitude,
@@ -790,6 +838,88 @@ app.get("/neighbour/availableCommunities/location", async (req, res) => {
         client.release();
     }
 });
+
+app.post("/neighbour/share", async (req, res) => {
+    const client = await pool.connect();
+    const {
+        username,
+        community_name,
+        title,
+        description,
+        is_borrowable,
+        borrow_fee,
+    } = req.body;
+    try {
+        await client.query(
+            "INSERT INTO borrow_and_share (poster_username, community_name, item_name, item_description, is_borrowable, borrow_fee) VALUES ($1, $2, $3, $4, $5, $6)",
+            [
+                username,
+                community_name,
+                title,
+                description,
+                is_borrowable,
+                borrow_fee,
+            ],
+        );
+        res.status(200).json({ message: "Share created." });
+    } catch (err) {
+        console.error("Error occured in creating share: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.get("/neighbour/share/:community_name", async (req, res) => {
+    const client = await pool.connect();
+    const { community_name } = req.params;
+    try {
+        const shares = await client.query(
+            "SELECT * FROM borrow_and_share WHERE community_name = $1",
+            [community_name],
+        );
+        res.status(200).json({ shares: shares.rows });
+    } catch (err) {
+        console.error("Error occured in getting shares: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.post("/neighbour/share/borrow", async (req, res) => {
+    const client = await pool.connect();
+    const { username, item_name } = req.body;
+    try {
+        await client.query(
+            "UPDATE borrow_and_share SET is_borrowable = false, is_borrowed = true, borrower_username = $1 , date_borrowed = CURRENT_TIMESTAMP WHERE item_name = $2 ",
+            [username, item_name],
+        );
+        res.status(200).json({ message: "Borrowed." });
+    } catch (err) {
+        console.error("Error occured in borrowing: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.post("/neighbour/share/return", async (req, res) => {
+    const client = await pool.connect();
+    const { username, item_name } = req.body;
+    try {
+        await client.query(
+            "UPDATE borrow_and_share SET is_borrowable = true, is_borrowed = false, borrower_username = null , date_borrowed = null WHERE item_name = $1 AND poster_username = $2",
+            [item_name, username],
+        );
+        res.status(200).json({ message: "Returned." });
+    } catch (err) {
+        console.error("Error occured in returning: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release()
+    }
+})
 
 app.get("/", (req, res) => {
     res.status(200).json({ message: "Welcome to the neighbour API! " });
