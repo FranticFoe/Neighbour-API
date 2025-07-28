@@ -484,11 +484,11 @@ app.post("/neighbour/create/events", async (req, res) => {
             .json({ message: "You are not the leader of this community." });
     }
     try {
-        const { date, start_time, end_time, event_title, event_description } =
+        const { date, start_time, end_time, event_image_url, event_title, event_description } =
             req.body;
 
         await client.query(
-            "INSERT INTO events (date, start_time, end_time, event_title, event_description, community_name,created_by) VALUES ($1, $2, $3, $4, $5, $6,$7)",
+            "INSERT INTO events (date, start_time, end_time, event_title, event_description, community_name,created_by, event_image_url) VALUES ($1, $2, $3, $4, $5, $6,$7,$8)",
             [
                 date,
                 start_time,
@@ -497,6 +497,7 @@ app.post("/neighbour/create/events", async (req, res) => {
                 event_description,
                 community_name,
                 leader_name,
+                event_image_url,
             ],
         );
         res.status(200).json({ message: "Event created." });
@@ -917,7 +918,147 @@ app.post("/neighbour/share/return", async (req, res) => {
         console.error("Error occured in returning: ", err);
         res.status(500).json({ message: "Internal server error" });
     } finally {
-        client.release()
+        client.release();
+    }
+});
+
+app.delete("/neighbour/share/delete", async (req, res) => {
+    const client = await pool.connect();
+    const { username, item_name } = req.body;
+    try {
+        await client.query(
+            "DELETE FROM borrow_and_share WHERE item_name = $1 AND poster_username = $2",
+            [item_name, username],
+        );
+        res.status(200).json({ message: "Deleted." });
+    } catch (err) {
+        console.error("Error occured in deleting: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.put("/neighbour/profile/image", async (req, res) => {
+    const client = await pool.connect();
+    const { username, imageUrl } = req.body;
+    try {
+        await client.query(
+            "UPDATE neighbour_profile SET profile_image_url = $1 WHERE username = $2",
+            [imageUrl, username],
+        );
+        res.status(200).json({ message: "Image uploaded." });
+    } catch (err) {
+        console.error("Error occured in uploading image: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.put("/neighbour/profile/info", async (req, res) => {
+    const client = await pool.connect();
+    const { username, profile_name, profile_description } = req.body;
+    try {
+        await client.query(
+            "UPDATE neighbour_profile SET profile_name = $1, profile_description = $2 WHERE username = $3",
+            [profile_name, profile_description, username],
+        );
+        res.status(200).json({ message: "Profile updated." });
+    } catch (err) {
+        console.error("Error occured in updating profile: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.put("/neighbour/profile/banner", async (req, res) => {
+    const client = await pool.connect();
+    const { username, bannerUrl } = req.body;
+    try {
+        await client.query(
+            "UPDATE neighbour_profile SET banner_image_url = $1 WHERE username = $2",
+            [bannerUrl, username],
+        );
+        res.status(200).json({ message: "Banner uploaded." });
+    } catch (err) {
+        console.error("Error occured in uploading banner: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.put("/neighbour/events/update", async (req, res) => {
+    const client = await pool.connect();
+    const { leader_name, community_name } = req.body;
+
+    const checkLeader = await client.query(
+        "SELECT * FROM community WHERE leader_name = $1 AND community_name = $2",
+        [leader_name, community_name],
+    );
+
+    if (checkLeader.rows.length === 0) {
+        return res
+            .status(400)
+            .json({ message: "You are not the leader of this community." });
+    }
+
+    const {
+        event_id,
+        date,
+        start_time,
+        end_time,
+        event_title,
+        event_description,
+        event_image_url,
+    } = req.body;
+    try {
+        await client.query(
+            "UPDATE events SET date = $1, start_time = $2, end_time = $3, event_image_url = $4, event_title = $5, event_description = $6 WHERE event_id = $7",
+            [
+                date,
+                start_time,
+                end_time,
+                event_image_url,
+                event_title,
+                event_description,
+                event_id,
+            ],
+        );
+        res.status(200).json({ message: "Event updated." });
+    } catch (err) {
+        console.error("Error occured in updating event: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete("/neighbour/events/delete", async (req, res) => {
+    const client = await pool.connect();
+    const { leader_name, community_name, event_id } = req.body;
+    const checkLeader = await client.query(
+        "SELECT * FROM community WHERE leader_name = $1 AND community_name = $2",
+        [leader_name, community_name],
+    );
+    if (checkLeader.rows.length === 0) {
+        return res
+            .status(400)
+            .json({ message: "You are not the leader of this community." });
+    }
+    try {
+        await client.query(
+            "DELETE FROM events WHERE event_id = $1",
+            [event_id],
+        );
+        res.status(200).json({ message: "Event deleted." });
+    } catch {
+        console.error("Error occured in deleting event: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
     }
 })
 
