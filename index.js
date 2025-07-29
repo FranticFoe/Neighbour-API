@@ -854,10 +854,11 @@ app.post("/neighbour/share", async (req, res) => {
         description,
         is_borrowable,
         borrow_fee,
+        item_image_url,
     } = req.body;
     try {
         await client.query(
-            "INSERT INTO borrow_and_share (poster_username, community_name, item_name, item_description, is_borrowable, borrow_fee) VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO borrow_and_share (poster_username, community_name, item_name, item_description, is_borrowable, borrow_fee, item_image_url) VALUES ($1, $2, $3, $4, $5, $6, $7)",
             [
                 username,
                 community_name,
@@ -865,6 +866,7 @@ app.post("/neighbour/share", async (req, res) => {
                 description,
                 is_borrowable,
                 borrow_fee,
+                item_image_url,
             ],
         );
         res.status(200).json({ message: "Share created." });
@@ -885,6 +887,26 @@ app.get("/neighbour/share/:community_name", async (req, res) => {
             [community_name],
         );
         res.status(200).json({ shares: shares.rows });
+    } catch (err) {
+        console.error("Error occured in getting shares: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.get("/neighbour/share/user/:username", async (req, res) => {
+    const client = await pool.connect();
+    const { username } = req.params;
+
+    try {
+        const shares = await client.query(
+            "SELECT * FROM borrow_and_share WHERE poster_username = $1",
+            [username],
+        );
+        res.status(200).json({
+            shares: shares.rows,
+        });
     } catch (err) {
         console.error("Error occured in getting shares: ", err);
         res.status(500).json({ message: "Internal server error" });
@@ -921,23 +943,6 @@ app.post("/neighbour/share/return", async (req, res) => {
         res.status(200).json({ message: "Returned." });
     } catch (err) {
         console.error("Error occured in returning: ", err);
-        res.status(500).json({ message: "Internal server error" });
-    } finally {
-        client.release();
-    }
-});
-
-app.delete("/neighbour/share/delete", async (req, res) => {
-    const client = await pool.connect();
-    const { username, item_name } = req.body;
-    try {
-        await client.query(
-            "DELETE FROM borrow_and_share WHERE item_name = $1 AND poster_username = $2",
-            [item_name, username],
-        );
-        res.status(200).json({ message: "Deleted." });
-    } catch (err) {
-        console.error("Error occured in deleting: ", err);
         res.status(500).json({ message: "Internal server error" });
     } finally {
         client.release();
@@ -1152,10 +1157,100 @@ app.get("/neighbour/help/needed/:username", async (req, res) => {
     const client = await pool.connect();
     const { username } = req.params;
     try {
-        const helpNeeded = await client.query("SELECT * FROM help_needed WHERE username = $1", [username]);
+        const helpNeeded = await client.query(
+            "SELECT * FROM help_needed WHERE username = $1",
+            [username],
+        );
         res.status(200).json({ helpNeeded: helpNeeded.rows });
     } catch (err) {
         console.error("Error occured in getting help needed: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete("/neighbour/share/delete", async (req, res) => {
+    const client = await pool.connect();
+    const { username, item_id } = req.body;
+    const checkisPoster = await client.query(
+        "SELECT * FROM borrow_and_share WHERE poster_username = $1 AND id = $2",
+        [username, item_id],
+    );
+    if (checkisPoster.rows.length === 0) {
+        return res
+            .status(400)
+            .json({ message: "You are not the poster of this item." });
+    }
+    try {
+        await client.query(
+            "DELETE FROM borrow_and_share WHERE id = $1 AND poster_username = $2",
+            [item_id, username],
+        );
+        res.status(200).json({ message: "Deleted." });
+    } catch (err) {
+        console.error("Error occured in deleting: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.put("/neighbour/share/update", async (req, res) => {
+    const client = await pool.connect();
+    const {
+        username,
+        item_id,
+        item_name,
+        description,
+        is_borrowable,
+        borrow_fee,
+        item_image_url,
+    } = req.body;
+    const checkisPoster = await client.query(
+        "SELECT * FROM borrow_and_share WHERE poster_username = $1 AND id = $2",
+        [username, item_id],
+    );
+    if (checkisPoster.rows.length === 0) {
+        return res
+            .status(400)
+            .json({ message: "You are not the poster of this item." });
+    }
+    try {
+        await client.query(
+            "UPDATE borrow_and_share SET item_name = $1, item_description = $2, is_borrowable = $3, borrow_fee = $4, item_image_url = $5 WHERE id = $6 AND poster_username = $7",
+            [
+                item_name,
+                description,
+                is_borrowable,
+                borrow_fee,
+                item_image_url,
+                item_id,
+                username,
+            ],
+        );
+        res.status(200).json({ message: "Updated." });
+    } catch (err) {
+        console.error("Error occured in updating: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.get("/neighbour/members/:community_name/:username", async (req, res) => {
+    const client = await pool.connect();
+    const { community_name, username } = req.params;
+    const checkisMember = await client.query("SELECT * FROM neighbours WHERE community_name = $1 AND username = $2", [community_name, username]);
+    if (checkisMember.rows.length === 0) {
+        return res.status(400).json({ message: "You are not a member of this community." });
+    }
+    try {
+        const members = await client.query("SELECT * FROM neighbour_profile WHERE community_name = $1", [community_name]);
+        const filterUser = members.rows.filter((member) => member.username !== username)
+        res.status(200).json({ members: filterUser });
+    } catch (err) {
+        console.error("Error occured in getting members: ", err);
         res.status(500).json({ message: "Internal server error" });
     } finally {
         client.release();
