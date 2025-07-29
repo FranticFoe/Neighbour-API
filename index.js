@@ -1122,7 +1122,7 @@ app.put("/neighbour/help/update", async (req, res) => {
             ],
         );
         res.status(200).json({ message: "Task updated." });
-    } catch {
+    } catch (err) {
         console.error("Error occured in updating task: ", err);
         res.status(500).json({ message: "Internal server error" });
     } finally {
@@ -1241,13 +1241,23 @@ app.put("/neighbour/share/update", async (req, res) => {
 app.get("/neighbour/members/:community_name/:username", async (req, res) => {
     const client = await pool.connect();
     const { community_name, username } = req.params;
-    const checkisMember = await client.query("SELECT * FROM neighbours WHERE community_name = $1 AND username = $2", [community_name, username]);
+    const checkisMember = await client.query(
+        "SELECT * FROM neighbours WHERE community_name = $1 AND username = $2",
+        [community_name, username],
+    );
     if (checkisMember.rows.length === 0) {
-        return res.status(400).json({ message: "You are not a member of this community." });
+        return res
+            .status(400)
+            .json({ message: "You are not a member of this community." });
     }
     try {
-        const members = await client.query("SELECT * FROM neighbour_profile WHERE community_name = $1", [community_name]);
-        const filterUser = members.rows.filter((member) => member.username !== username)
+        const members = await client.query(
+            "SELECT * FROM neighbour_profile WHERE community_name = $1",
+            [community_name],
+        );
+        const filterUser = members.rows.filter(
+            (member) => member.username !== username,
+        );
         res.status(200).json({ members: filterUser });
     } catch (err) {
         console.error("Error occured in getting members: ", err);
@@ -1255,7 +1265,22 @@ app.get("/neighbour/members/:community_name/:username", async (req, res) => {
     } finally {
         client.release();
     }
-})
+});
+
+app.get("/neighbour/community", async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const communities = await client.query(
+            "SELECT community_name, community_description, no_residents FROM community",
+        );
+        res.status(200).json({ communities: communities.rows });
+    } catch (err) {
+        console.error("Error occured in getting communities: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
 
 app.get("/", (req, res) => {
     res.status(200).json({ message: "Welcome to the neighbour API! " });
