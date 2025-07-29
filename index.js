@@ -333,6 +333,7 @@ app.post("/neighbour/help", async (req, res) => {
         start_time,
         duration,
         task_rewards,
+        task_image_url,
     } = req.body;
 
     function addMinutesToHHMM(timeStr, minutesToAdd) {
@@ -362,7 +363,7 @@ app.post("/neighbour/help", async (req, res) => {
         const parsedDate = date === "" ? null : date;
         const parsedTime = start_time === "" ? null : start_time;
         await client.query(
-            "INSERT INTO help_needed (username, community_name, task_title, description, images, capacity, date, start_time, end_time, task_rewards) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+            "INSERT INTO help_needed (username, community_name, task_title, description, images, capacity, date, start_time, end_time, task_rewards,task_image_url) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,$11)",
             [
                 neighbour_username,
                 community_name,
@@ -374,6 +375,7 @@ app.post("/neighbour/help", async (req, res) => {
                 parsedTime,
                 end_time,
                 task_rewards,
+                task_image_url,
             ],
         );
         res.status(200).json({ message: "Help needed posted." });
@@ -450,10 +452,7 @@ app.post("/neighbour/helpers", async (req, res) => {
         const { capacity, current_helper } = updated.rows[0];
 
         // If capacity is null or has reached the limit, mark status true
-        if (
-            capacity === null ||
-            (capacity !== null && current_helper >= capacity)
-        ) {
+        if (capacity !== null && current_helper >= capacity) {
             await client.query(
                 "UPDATE help_needed SET status = true WHERE id = $1",
                 [task_id],
@@ -484,8 +483,14 @@ app.post("/neighbour/create/events", async (req, res) => {
             .json({ message: "You are not the leader of this community." });
     }
     try {
-        const { date, start_time, end_time, event_image_url, event_title, event_description } =
-            req.body;
+        const {
+            date,
+            start_time,
+            end_time,
+            event_image_url,
+            event_title,
+            event_description,
+        } = req.body;
 
         await client.query(
             "INSERT INTO events (date, start_time, end_time, event_title, event_description, community_name,created_by, event_image_url) VALUES ($1, $2, $3, $4, $5, $6,$7,$8)",
@@ -1049,13 +1054,108 @@ app.delete("/neighbour/events/delete", async (req, res) => {
             .json({ message: "You are not the leader of this community." });
     }
     try {
-        await client.query(
-            "DELETE FROM events WHERE event_id = $1",
-            [event_id],
-        );
+        await client.query("DELETE FROM events WHERE event_id = $1", [
+            event_id,
+        ]);
         res.status(200).json({ message: "Event deleted." });
-    } catch {
+    } catch (err) {
         console.error("Error occured in deleting event: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.put("/neighbour/help/update", async (req, res) => {
+    const client = await pool.connect();
+    const { username, community_name, task_id } = req.body;
+    function addMinutesToHHMM(timeStr, minutesToAdd) {
+        const [hh, mm] = timeStr.split(":").map(Number);
+        const totalMinutes = hh * 60 + mm + minutesToAdd;
+        const newH = Math.floor(totalMinutes / 60) % 24;
+        const newM = totalMinutes % 60;
+        return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
+    }
+    const checkisPoster = await client.query(
+        "SELECT * FROM help_needed WHERE username = $1 AND community_name = $2 AND id = $3",
+        [username, community_name, task_id],
+    );
+    if (checkisPoster.rows.length === 0) {
+        return res
+            .status(400)
+            .json({ message: "You are not the poster of this task." });
+    }
+
+    try {
+        const {
+            task_title,
+            task_description,
+            capacity,
+            date,
+            start_time,
+            duration,
+            task_rewards,
+            task_image_url,
+        } = req.body;
+
+        let end_time = null;
+        if (start_time && duration) {
+            end_time = addMinutesToHHMM(start_time, duration);
+        }
+        await client.query(
+            "UPDATE help_needed SET task_title = $1, description = $2, capacity = $3, date = $4, start_time = $5, end_time = $6, task_rewards = $7, task_image_url = $8 WHERE id = $9",
+            [
+                task_title,
+                task_description,
+                capacity,
+                date,
+                start_time,
+                end_time,
+                task_rewards,
+                task_image_url,
+                task_id,
+            ],
+        );
+        res.status(200).json({ message: "Task updated." });
+    } catch {
+        console.error("Error occured in updating task: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.delete("/neighbour/help/delete", async (req, res) => {
+    const client = await pool.connect();
+    const { username, community_name, task_id } = req.body;
+    const checkisPoster = await client.query(
+        "SELECT * FROM help_needed WHERE username = $1 AND community_name = $2 AND id = $3",
+        [username, community_name, task_id],
+    );
+    if (checkisPoster.rows.length === 0) {
+        return res
+            .status(400)
+            .json({ message: "You are not the poster of this task." });
+    }
+    try {
+        await client.query("DELETE FROM help_needed WHERE id = $1", [task_id]);
+        res.status(200).json({ message: "Task deleted." });
+    } catch (err) {
+        console.error("Error occured in deleting task: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
+app.get("/neighbour/help/needed/:username", async (req, res) => {
+    const client = await pool.connect();
+    const { username } = req.params;
+    try {
+        const helpNeeded = await client.query("SELECT * FROM help_needed WHERE username = $1", [username]);
+        res.status(200).json({ helpNeeded: helpNeeded.rows });
+    } catch (err) {
+        console.error("Error occured in getting help needed: ", err);
         res.status(500).json({ message: "Internal server error" });
     } finally {
         client.release();
