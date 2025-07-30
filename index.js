@@ -1265,10 +1265,10 @@ app.get("/neighbour/members/:community_name/:username", async (req, res) => {
             "SELECT * FROM neighbour_profile WHERE community_name = $1",
             [community_name],
         );
-        // const filterUser = members.rows.filter(
-        //     (member) => member.username !== username,
-        // );
-        res.status(200).json({ members: members });
+        const filterUser = members.rows.filter(
+            (member) => member.username !== username,
+        );
+        res.status(200).json({ members: filterUser });
     } catch (err) {
         console.error("Error occured in getting members: ", err);
         res.status(500).json({ message: "Internal server error" });
