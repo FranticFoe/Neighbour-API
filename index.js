@@ -233,6 +233,8 @@ app.post("/join/by-link", async (req, res) => {
             [community_name],
         );
 
+        //missing update neighbour_profile community_name
+
         res.status(200).json({ message: "Successfully joined community!" });
     } catch (err) {
         console.error("Error accepting invite link:", err);
@@ -246,7 +248,7 @@ app.post("/join/by-link", async (req, res) => {
 app.post("/accept/invite", async (req, res) => {
     const client = await pool.connect();
     try {
-        const { neighbour_id, community_name } = req.body;
+        const { neighbour_id, community_name, username } = req.body;
         const checkInvite = await client.query(
             "SELECT * FROM community_invitations WHERE invited_user = $1 AND community_name = $2",
             [neighbour_id, community_name],
@@ -259,6 +261,10 @@ app.post("/accept/invite", async (req, res) => {
         await client.query(
             "UPDATE neighbours SET community_name = $1 WHERE neighbour_id = $2",
             [community_name, neighbour_id],
+        );
+        await client.query(
+            "UPDATE neighbour_profile SET community_name = $1 WHERE username = $2",
+            [community_name, username],
         );
         await client.query(
             "UPDATE community SET no_residents = no_residents + 1 WHERE community_name = $1",
@@ -785,6 +791,10 @@ app.post("/neighbour/join/request/accept", async (req, res) => {
             [community_name, sender_name],
         );
         await client.query(
+            "UPDATE neighbour_profile SET community_name = $1 WHERE username = $2",
+            [community_name, sender_name],
+        );
+        await client.query(
             "DELETE FROM community_join_request WHERE sender_name = $1",
             [sender_name],
         );
@@ -1122,7 +1132,7 @@ app.put("/neighbour/help/update", async (req, res) => {
             ],
         );
         res.status(200).json({ message: "Task updated." });
-    } catch (err) {
+    } catch {
         console.error("Error occured in updating task: ", err);
         res.status(500).json({ message: "Internal server error" });
     } finally {
@@ -1255,10 +1265,10 @@ app.get("/neighbour/members/:community_name/:username", async (req, res) => {
             "SELECT * FROM neighbour_profile WHERE community_name = $1",
             [community_name],
         );
-        const filterUser = members.rows.filter(
-            (member) => member.username !== username,
-        );
-        res.status(200).json({ members: filterUser });
+        // const filterUser = members.rows.filter(
+        //     (member) => member.username !== username,
+        // );
+        res.status(200).json({ members: members });
     } catch (err) {
         console.error("Error occured in getting members: ", err);
         res.status(500).json({ message: "Internal server error" });
