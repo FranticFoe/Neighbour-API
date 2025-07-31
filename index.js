@@ -807,6 +807,23 @@ app.post("/neighbour/join/request/accept", async (req, res) => {
     }
 });
 
+app.get("/neighbour/sent_request/:username", async (req, res) => {
+    const client = await pool.connect();
+    const { username } = req.params
+    try {
+        const requests = await client.query(
+            "SELECT * FROM community_join_request WHERE sender_name = $1",
+            [username]
+        )
+        res.status(200).json({ message: "Success in pulling all sent requests.", requests })
+    } catch (err) {
+        console.error("Error in fetching all join requests:", err)
+        res.status(500).json({ message: "Internal server error" })
+    } finally {
+        client.release();
+    }
+})
+
 app.delete("/neighbour/join/request/decline", async (req, res) => {
     const client = await pool.connect();
     const { community_name, username, sender_name } = req.body;
