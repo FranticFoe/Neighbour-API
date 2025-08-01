@@ -1361,6 +1361,36 @@ app.put("/neighbour/join_request/has_read", async (req, res) => {
     }
 })
 
+app.get("/neighbour/unread_count", async (req, res) => {
+    const client = await pool.connect();
+    const { community_name, username } = req.query;
+    try {
+        const checkLeader = await client.query(
+            "SELECT * FROM community WHERE leader_name = $1 AND community_name = $2",
+            [username, community_name],
+        );
+
+        if (checkLeader.rows.length === 0) {
+            const unreadCount = await client.query(
+                "SELECT SUM((NOT sender_has_read)::int) AS unread_count FROM community_join_request WHERE sender_name = $1",
+                [username]
+            );
+            res.status(200).json({ unread_count: unreadCount.rows[0].unread_count });
+        } else {
+            const unreadCount = await client.query(
+                "SELECT SUM((NOT leader_has_read)::int) AS unread_count FROM community_join_request WHERE community_name = $1",
+                [community_name]
+            );
+            res.status(200).json({ unread_count: unreadCount.rows[0].unread_count });
+        }
+    } catch (err) {
+        console.error("Error in fetching unread count:", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+});
+
 app.get("/", (req, res) => {
     res.status(200).json({ message: "Welcome to the neighbour API! " });
 });
