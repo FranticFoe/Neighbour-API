@@ -763,7 +763,7 @@ app.get("/neighbour/join/request/:community_name", async (req, res) => {
             "SELECT * FROM community_join_request WHERE community_name = $1",
             [community_name],
         );
-        res.status(200).json({ requests: requests.rows });
+        res.status(200).json({ requests: requests.rows, Info: requests });
     } catch (err) {
         console.error("Error occured in getting join requests: ", err);
         res.status(500).json({ message: "Internal server error" });
