@@ -1382,6 +1382,23 @@ app.get("/neighbour/unread_count", async (req, res) => {
     }
 });
 
+app.put("/neighbour/join_request/has_unread", async (req, res) => {
+    const client = await pool.connect();
+    const { community_name, username } = req.body
+    try {
+        await client.query(
+            "UPDATE community_join_request SET sender_has_read = TRUE WHERE sender_name = $1 AND community_name = $2",
+            [username, community_name]
+        )
+        res.status(200).json({ message: "Updated has_read status to false." })
+    } catch (err) {
+        console.error("Error in updating read status:", err)
+        res.status(500).json({ message: "Internal server Error" })
+    } finally {
+        client.release();
+    }
+})
+
 app.get("/", (req, res) => {
     res.status(200).json({ message: "Welcome to the neighbour API! " });
 });
