@@ -1338,15 +1338,6 @@ app.put("/neighbour/sent_request/has_read", async (req, res) => {
 app.put("/neighbour/join_request/has_read", async (req, res) => {
     const client = await pool.connect();
     const { community_name, username } = req.body
-    const checkisMember = await client.query(
-        "SELECT * FROM neighbours WHERE community_name = $1 AND username = $2",
-        [community_name, username]
-    );
-    if (checkisMember.rows.length === 0) {
-        return res
-            .status(400)
-            .json({ message: "You are not a member of this community." });
-    }
     try {
         await client.query(
             "UPDATE community_join_request SET sender_has_read = TRUE WHERE sender_name = $1 AND community_name = $2",
