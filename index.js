@@ -1363,13 +1363,13 @@ app.get("/neighbour/unread_count", async (req, res) => {
 
         if (checkLeader.rows.length === 0) {
             const unreadCount = await client.query(
-                "SELECT SUM((NOT sender_has_read)::int) AS unread_count FROM community_join_request WHERE sender_name = $1",
+                "SELECT SUM((NOT sender_has_read)::int,0) AS unread_count FROM community_join_request WHERE sender_name = $1",
                 [username]
             );
             res.status(200).json({ unread_count: unreadCount.rows[0].unread_count });
         } else {
             const unreadCount = await client.query(
-                "SELECT SUM((NOT leader_has_read)::int) AS unread_count FROM community_join_request WHERE community_name = $1",
+                "SELECT SUM((NOT leader_has_read)::int,0) AS unread_count FROM community_join_request WHERE community_name = $1",
                 [community_name]
             );
             res.status(200).json({ unread_count: unreadCount.rows[0].unread_count });
