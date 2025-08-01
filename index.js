@@ -1309,6 +1309,58 @@ app.get("/neighbour/community", async (req, res) => {
     }
 });
 
+app.put("/neighbour/sent_request/has_read", async (req, res) => {
+    const client = await pool.connect();
+    const { community_name, username, senderName } = req.body
+    const checkisMember = await client.query(
+        "SELECT * FROM neighbours WHERE community_name = $1 AND username = $2",
+        [community_name, username]
+    );
+    if (checkisMember.rows.length === 0) {
+        return res
+            .status(400)
+            .json({ message: "You are not a member of this community." });
+    }
+    try {
+        await client.query(
+            "UPDATE community_join_request SET leader_has_read = TRUE WHERE sender_name = $1 AND community_name = $2",
+            [senderName, community_name]
+        )
+        res.status(200).json({ message: "Updated has_read status to true." })
+    } catch (err) {
+        console.error("Error in updating read status:", err)
+        res.status(500).json({ message: "Internal server Error" })
+    } finally {
+        client.release();
+    }
+})
+
+app.put("/neighbour/join_request/has_read", async (req, res) => {
+    const client = await pool.connect();
+    const { community_name, username } = req.body
+    const checkisMember = await client.query(
+        "SELECT * FROM neighbours WHERE community_name = $1 AND username = $2",
+        [community_name, username]
+    );
+    if (checkisMember.rows.length === 0) {
+        return res
+            .status(400)
+            .json({ message: "You are not a member of this community." });
+    }
+    try {
+        await client.query(
+            "UPDATE community_join_request SET sender_has_read = TRUE WHERE sender_name = $1 AND community_name = $2",
+            [username, community_name]
+        )
+        res.status(200).json({ message: "Updated has_read status to true." })
+    } catch (err) {
+        console.error("Error in updating read status:", err)
+        res.status(500).json({ message: "Internal server Error" })
+    } finally {
+        client.release();
+    }
+})
+
 app.get("/", (req, res) => {
     res.status(200).json({ message: "Welcome to the neighbour API! " });
 });
