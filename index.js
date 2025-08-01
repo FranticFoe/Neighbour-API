@@ -1387,7 +1387,7 @@ app.put("/neighbour/join_request/has_unread", async (req, res) => {
     const { community_name, username } = req.body
     try {
         await client.query(
-            "UPDATE community_join_request SET sender_has_read = TRUE WHERE sender_name = $1 AND community_name = $2",
+            "UPDATE community_join_request SET sender_has_read = FALSE WHERE sender_name = $1 AND community_name = $2",
             [username, community_name]
         )
         res.status(200).json({ message: "Updated has_read status to false." })
