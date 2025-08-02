@@ -1309,7 +1309,7 @@ app.get("/neighbour/community", async (req, res) => {
     }
 });
 
-app.put("/neighbour/sent_request/has_read", async (req, res) => {
+app.put("/neighbour/join_request/has_read", async (req, res) => {
     const client = await pool.connect();
     const { community_name, username, senderName } = req.body
     const checkisMember = await client.query(
@@ -1390,7 +1390,7 @@ app.put("/neighbour/sent_request/has_unread", async (req, res) => {
             "UPDATE community_join_request SET sender_has_read = FALSE WHERE sender_name = $1 AND community_name = $2",
             [username, community_name]
         )
-        res.status(200).json({ message: "Updated has_read status to false." })
+        res.status(200).json({ message: "Updated has_read status for sender to false." })
     } catch (err) {
         console.error("Error in updating read status:", err)
         res.status(500).json({ message: "Internal server Error" })
@@ -1404,7 +1404,7 @@ app.put("/neighbour/join_request/has_unread", async (req, res) => {
     const { community_name, senderName } = req.body
     try {
         await client.query(
-            "UPDATE community_join_request SET leader_has_read = FALSE WHERE sender_name = $1 AND community_name = $2",
+            "UPDATE community_join_request SET leader_has_read = FALSE WHERE sender_name = $1 AND community_name = $2 ",
             [senderName, community_name]
         )
         res.status(200).json({ message: "Updated has_read status for leader to false." })
