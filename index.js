@@ -62,11 +62,11 @@ app.post("/signup", async (req, res) => {
 
 app.post("/retrieveEmail", async (req, res) => {
     const client = await pool.connect();
-    const { emailOrUsername } = req.body;
+    const { email } = req.body;
     try {
         const table = await client.query(
-            "SELECT * FROM neighbours WHERE email = $1 OR username = $1",
-            [emailOrUsername],
+            "SELECT * FROM neighbours WHERE email = $1",
+            [email],
         );
         const userExists = table.rows[0];
         if (!userExists) {
@@ -75,7 +75,7 @@ app.post("/retrieveEmail", async (req, res) => {
                 .json({ message: "Invalid email or username" });
         }
 
-        const email = userExists.email;
+        const emailInfo = userExists.email;
         console.log("Logged in user with ID", userExists.neighbour_id);
         console.log("Email: ", email);
         res.status(200).json({ auth: true, email });
