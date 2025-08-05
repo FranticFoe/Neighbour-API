@@ -87,12 +87,12 @@ app.post("/retrieveEmail", async (req, res) => {
     }
 });
 
-app.get("/checkGmailsignin", async (req, res) => {
+app.get("/checkGmailsignin/:email", async (req, res) => {
     const client = await pool.connect();
-    const { email } = req.body;
+    const { email } = req.params;
     try {
         const table = await client.query(
-            "SELECT * FROM neighbours WHERE email",
+            "SELECT * FROM neighbours WHERE email=$1",
             [email],
         );
         const userExists = table.rows[0];
