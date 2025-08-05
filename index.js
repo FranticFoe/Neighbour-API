@@ -62,11 +62,11 @@ app.post("/signup", async (req, res) => {
 
 app.post("/retrieveEmail", async (req, res) => {
     const client = await pool.connect();
-    const { email } = req.body;
+    const { emailOrUsername } = req.body;
     try {
         const table = await client.query(
-            "SELECT * FROM neighbours WHERE email = $1",
-            [email],
+            "SELECT * FROM neighbours WHERE email = $1 OR username = $1",
+            [emailOrUsername],
         );
         const userExists = table.rows[0];
         if (!userExists) {
@@ -75,7 +75,7 @@ app.post("/retrieveEmail", async (req, res) => {
                 .json({ message: "Invalid email or username" });
         }
 
-        const emailInfo = userExists.email;
+        const email = userExists.email;
         console.log("Logged in user with ID", userExists.neighbour_id);
         console.log("Email: ", email);
         res.status(200).json({ auth: true, email });
@@ -86,6 +86,33 @@ app.post("/retrieveEmail", async (req, res) => {
         client.release();
     }
 });
+
+app.get("/checkGmailsignin", async (req, res) => {
+    const client = await pool.connect();
+    const { email } = req.body;
+    try {
+        const table = await client.query(
+            "SELECT * FROM neighbours WHERE email",
+            [email],
+        );
+        const userExists = table.rows[0];
+        if (!userExists) {
+            return res
+                .status(200)
+                .json({ auth: false, message: "Gmail does not exist" });
+        }
+
+        const emailInfo = userExists.email;
+        console.log("Logged in user with ID", userExists.neighbour_id);
+        console.log("Email: ", email);
+        res.status(200).json({ auth: true, emailInfo });
+    } catch (err) {
+        console.error("Error occured in login: ", err);
+        res.status(500).json({ message: "Internal server error" });
+    } finally {
+        client.release();
+    }
+})
 
 app.post("/create/community", async (req, res) => {
     const client = await pool.connect();
